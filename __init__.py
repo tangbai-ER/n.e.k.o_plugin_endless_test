@@ -17,24 +17,23 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import threading
-import uuid
 import time
+import uuid
 from datetime import datetime
-from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, Optional
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
 from plugin.sdk.plugin import (
+    Err,
     NekoPluginBase,
+    Ok,
+    SdkError,
+    lifecycle,
     neko_plugin,
     plugin_entry,
-    lifecycle,
-    Ok,
-    Err,
-    SdkError,
 )
 
 try:
@@ -799,11 +798,11 @@ class EndlessTestPlugin(NekoPluginBase):
             # QA 用：不经过 Neko，直接指定职业，便于自动化验证执行层
             with self._ally_lock:
                 self._ally = {"class": dbg, "tree": brain.tech_tree(dbg), "plan": [],
-                              "reason": "调试职业", "since": time.time()}
+                              "reason": "我来支援", "since": time.time()}
                 self._ally_owned = []
             cls0 = brain.CLASSES[dbg]
             return {"ok": True, "class": dbg, "name": cls0["name"], "color": cls0["color"],
-                    "role": cls0["role"], "range": cls0["range"], "reason": "调试职业",
+                    "role": cls0["role"], "range": cls0["range"], "reason": "我来支援",
                     "tree": self._ally["tree"], "plan": [], "source": "debug"}
         classes = "\n".join(
             f"- {cid}: {brain.CLASSES[cid]['name']}（{brain.CLASSES[cid]['role']}）{brain.CLASSES[cid]['tag']}"
@@ -887,6 +886,33 @@ class EndlessTestPlugin(NekoPluginBase):
                 "at": time.time(),
             }
         return {"ok": True, "order": dict(self._ally_order)}
+
+    def _handle_quit(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """关掉由插件启动的全屏程序；游戏里的「退出游戏」会调这里。"""
+        proc = self._window_proc
+        if not proc or proc.poll() is not None:
+            self._window_proc = None
+            return {"ok": False, "error": "没有正在运行的全屏程序"}
+        pid = proc.pid
+        ok = False
+        try:
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                               capture_output=True, timeout=8)
+                ok = True
+            else:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=4)
+                except Exception:
+                    proc.kill()
+                ok = True
+        except Exception as exc:
+            self.logger.warning("quit window failed: {}", exc)
+        finally:
+            self._window_proc = None
+            self._session_release(self._session.get("token") or "")
+        return {"ok": ok, "pid": pid}
 
     def _handle_report(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         state = self._read_state()
