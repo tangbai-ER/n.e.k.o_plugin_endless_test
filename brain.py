@@ -9,7 +9,7 @@ llm_tool 完成，这里的函数不参与决策，只提供选项和数值。
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 # ---------------------------------------------------------------- 职业
 
