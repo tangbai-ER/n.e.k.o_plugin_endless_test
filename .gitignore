@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+*.neko-plugin
+state.json
+.DS_Store
+Thumbs.db
