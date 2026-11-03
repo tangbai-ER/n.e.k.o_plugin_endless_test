@@ -408,15 +408,170 @@
 <script>
 
 (function () {
-  var BUILD = 12;
+  var BUILD = "1.1.0";
   var $ = function (id) { return document.getElementById(id); };
   var PROBE = ["", "http://127.0.0.1:48931", "http://127.0.0.1:48932", "http://127.0.0.1:48933"];
   var base = null, online = false, probing = false, retryTimer = null, watchTimer = null;
 
   var stamp = $("buildStamp");
-  if (stamp) stamp.textContent = "BUILD " + BUILD + " · ";
+  if (stamp) stamp.textContent = "v" + BUILD + " · ";
 
   // 单次 ping：1.5 秒超时，失败就返回 false，不抛异常
+  // ═══════════ 面板专用音频 ═══════════
+  // panel.html 是独立页面，不加载 game.js，所以这里自带一套轻量音效。
+  var AUD = (function () {
+    var ac = null, master = null, muted = false;
+    function ensure() {
+      try {
+        if (!ac) {
+          ac = new (window.AudioContext || window.webkitAudioContext)();
+          master = ac.createGain();
+          master.gain.value = 0.55;
+          var comp = ac.createDynamicsCompressor();
+          comp.threshold.value = -18; comp.knee.value = 18; comp.ratio.value = 5;
+          master.connect(comp).connect(ac.destination);
+        }
+        if (ac.state === "suspended") ac.resume();
+        return ac;
+      } catch (e) { return null; }
+    }
+    function tone(freq, dur, type, gain, slide) {
+      var a = ensure(); if (!a || muted) return;
+      var t0 = a.currentTime;
+      var o = a.createOscillator(), g = a.createGain();
+      o.type = type || "sine";
+      o.frequency.setValueAtTime(freq, t0);
+      if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, slide), t0 + dur);
+      var atk = Math.min(0.008, dur * 0.3);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain || 0.1), t0 + atk);
+      g.gain.setValueAtTime(Math.max(0.0002, gain || 0.1), t0 + Math.max(atk, dur * 0.55));
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g).connect(master);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    }
+    function noise(dur, gain, filter) {
+      var a = ensure(); if (!a || muted) return;
+      var t0 = a.currentTime;
+      var n = Math.max(1, Math.floor(a.sampleRate * dur));
+      var buf = a.createBuffer(1, n, a.sampleRate);
+      var d = buf.getChannelData(0);
+      for (var i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      var src = a.createBufferSource(); src.buffer = buf;
+      var f = a.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = filter || 1200;
+      var g = a.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain || 0.08), t0 + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      src.connect(f).connect(g).connect(master);
+      src.start(t0); src.stop(t0 + dur + 0.02);
+    }
+    // 扫频噪声：带通频率在时长内从 f1 滑到 f2（做"展开/膨胀"的空间感）
+    function sweep(dur, gain, f1, f2) {
+      var a = ensure(); if (!a || muted) return;
+      var t0 = a.currentTime;
+      var n = Math.max(1, Math.floor(a.sampleRate * dur));
+      var buf = a.createBuffer(1, n, a.sampleRate);
+      var d = buf.getChannelData(0);
+      for (var i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      var src = a.createBufferSource(); src.buffer = buf;
+      var f = a.createBiquadFilter(); f.type = "bandpass"; f.Q.value = 1.1;
+      f.frequency.setValueAtTime(Math.max(40, f1), t0);
+      f.frequency.exponentialRampToValueAtTime(Math.max(40, f2), t0 + dur);
+      var g = a.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), t0 + Math.min(0.02, dur * 0.2));
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      src.connect(f).connect(g).connect(master);
+      src.start(t0); src.stop(t0 + dur + 0.02);
+    }
+
+    // 扫频噪声：带通频率在时长内从 f1 滑到 f2（做"展开/膨胀"的空间感）
+    function sweep(dur, gain, f1, f2) {
+      var a = ensure(); if (!a || muted) return;
+      var t0 = a.currentTime;
+      var n = Math.max(1, Math.floor(a.sampleRate * dur));
+      var buf = a.createBuffer(1, n, a.sampleRate);
+      var d = buf.getChannelData(0);
+      for (var i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      var src = a.createBufferSource(); src.buffer = buf;
+      var f = a.createBiquadFilter(); f.type = "bandpass"; f.Q.value = 1.1;
+      f.frequency.setValueAtTime(Math.max(40, f1), t0);
+      f.frequency.exponentialRampToValueAtTime(Math.max(40, f2), t0 + dur);
+      var g = a.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), t0 + Math.min(0.02, dur * 0.2));
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      src.connect(f).connect(g).connect(master);
+      src.start(t0); src.stop(t0 + dur + 0.02);
+    }
+
+    // 带最小间隔的节流
+    var gate = {};
+    function allow(name, gap) {
+      var now = performance.now();
+      if (gate[name] && now - gate[name] < gap) return false;
+      gate[name] = now; return true;
+    }
+    return {
+      unlock: ensure,
+      ui: function () { tone(640, 0.045, "sine", 0.05, 820); },
+      hover: function () { if (allow("hover", 60)) tone(760, 0.028, "sine", 0.024, 940); },
+      hoverLow:  function () { if (allow("hover", 60)) tone(560, 0.032, "sine", 0.026, 700); },
+      hoverHigh: function () { if (allow("hover", 60)) tone(940, 0.026, "sine", 0.023, 1180); },
+      hoverCore: function () { if (allow("hoverCore", 90)) { tone(330, 0.05, "sine", 0.03, 460); } },
+      hoverLow:  function () { if (allow("hover", 60)) tone(560, 0.032, "sine", 0.026, 700); },
+      hoverHigh: function () { if (allow("hover", 60)) tone(940, 0.026, "sine", 0.023, 1180); },
+      hoverCore: function () { if (allow("hoverCore", 90)) { tone(330, 0.05, "sine", 0.03, 460); } },
+      pick: function () { tone(520, 0.07, "triangle", 0.06, 780);
+                          setTimeout(function () { tone(880, 0.09, "sine", 0.05); }, 70); },
+      launch: function () {
+        [0, 80, 160, 260].forEach(function (d, i) {
+          setTimeout(function () { tone([392, 523, 659, 880][i], 0.18, "triangle", 0.07); }, d);
+        });
+        setTimeout(function () { noise(0.25, 0.05, 1400); }, 90);
+      },
+      ok: function () { tone(880, 0.08, "sine", 0.055, 1180);
+                        setTimeout(function () { tone(1320, 0.10, "sine", 0.045); }, 80); },
+      err: function () { tone(180, 0.10, "square", 0.07, 120); noise(0.08, 0.04, 700); },
+      online: function () { tone(523, 0.09, "sine", 0.05, 784);
+                           setTimeout(function () { tone(784, 0.11, "triangle", 0.045); }, 90); },
+      offline: function () { tone(320, 0.13, "sine", 0.05, 160); },
+      toggle: function () { tone(660, 0.035, "sine", 0.03, 880); },
+
+      // ── 核心球点击：比 pick 更"重"，因为它是主按钮 ──
+      core: function () {
+        tone(196, 0.14, "sine", 0.075, 330);
+        setTimeout(function () { tone(587, 0.10, "triangle", 0.05); }, 55);
+        setTimeout(function () { noise(0.10, 0.035, 1800); }, 20);
+      },
+
+      // ── 关闭/返回：下行 ──
+      close: function () {
+        tone(520, 0.10, "triangle", 0.05, 320);
+        setTimeout(function () { tone(320, 0.12, "sine", 0.04, 200); }, 65);
+      },
+
+      // ── toast 提示（比 ui 更轻，不抢注意力）──
+      tip: function () { if (allow("tip", 90)) tone(1040, 0.03, "sine", 0.022, 1240); },
+    };
+  })();
+
+  // 测试钩子：把面板音频暴露出去（只读，便于自动化验证）
+  window.__AUD = AUD;
+
+  // 全局：首次点击解锁音频，鼠标悬停菜单按钮有反馈音
+  document.addEventListener("pointerdown", function () { AUD.unlock(); }, { once: true });
+  document.addEventListener("mouseover", function (e) {
+    var t = e.target && e.target.closest ? e.target.closest(".entry[data-mode], .core, .retry-btn, #coreBtn, #retryBtn") : null;
+    if (!t) return;
+    // 不同按钮用不同音高，鼠标扫过时能听出"换了一个"
+    if (t.classList.contains("core") || t.id === "coreBtn") AUD.hoverCore();
+    else if (t.classList.contains("e2")) AUD.hoverLow();
+    else if (t.classList.contains("e3")) AUD.hoverHigh();
+    else AUD.hover();
+  }, true);
+
   function ping(b) {
     return new Promise(function (resolve) {
       var ctrl = window.AbortController ? new AbortController() : null;
@@ -474,6 +629,7 @@
     t.classList.add("on");
     clearTimeout(t._tid);
     t._tid = setTimeout(function () { t.classList.remove("on"); }, 2200);
+    try { AUD.tip(); } catch (e) { /* ignore */ }
   }
 
   function loadProfile() {
@@ -487,7 +643,9 @@
 
   // ---- 连接状态：红核 = 未启动 / 断线，蓝核 = 已启动 ----
   function setOnline(on) {
+    var _was = online;
     on = !!on;
+    if (_was !== on) { if (on) AUD.online(); else AUD.offline(); }
     var changed = on !== online;
     online = on;
     document.body.classList.toggle("ready", on);
@@ -590,26 +748,41 @@
     }).catch(function () { /* ignore */ });
   }
 
-  $("coreBtn").addEventListener("click", launchInPanel);
+  $("coreBtn").addEventListener("click", function () { AUD.core(); launchInPanel(); });
 
   document.querySelectorAll(".entry[data-mode]").forEach(function (btn) {
     btn.addEventListener("click", function () {
       var mode = btn.dataset.mode;
-      if (!online) { toast("插件未运行，先到插件管理里启动"); return; }
+      AUD.pick();
+      if (!online) { toast("插件未运行，先到插件管理里启动"); AUD.err(); return; }
       if (document.body.classList.contains("busy") && !(document.body.classList.contains("panel-live") && mode === "panel")) {
         toast("已经有一个游戏在运行了");
+        AUD.err();
         return;
       }
       if (mode === "panel") { launchInPanel(); return; }
       api("api/launch?mode=" + mode).then(function (r) { return r.json(); }).then(function (res) {
-        if (!res.ok) { toast("启动失败：" + (res.error || "未知")); return; }
-        toast("已启动全屏程序");
-      }).catch(function (e) { toast("启动失败：" + e.message); });
+        if (!res.ok) { toast("启动失败：" + (res.error || "未知")); AUD.err(); return; }
+        // 已在点击时播过 AUD.pick()，这里不再叠加启动音，
+        // 让「全屏程序」和「面板内游玩」听感一致
+        toast(mode === "window" ? "已启动全屏程序" : "已启动");
+      }).catch(function (e) { toast("启动失败：" + e.message); AUD.err(); });
     });
   });
 
+  // 入场：三张卡片依次"上线"
+  (function bootChime() {
+    var cards = document.querySelectorAll(".core, .entry[data-mode]");
+    for (var i = 0; i < cards.length; i++) {
+      (function (idx) {
+        setTimeout(function () { try { AUD.boot(idx); } catch (e) { /* ignore */ } }, 320 + idx * 170);
+      })(i);
+    }
+  })();
+
   var retryBtn = $("retryBtn");
   if (retryBtn) retryBtn.addEventListener("click", function () {
+    AUD.ui();
     $("foot").textContent = "正在连接插件…";
     tryConnect();
   });
