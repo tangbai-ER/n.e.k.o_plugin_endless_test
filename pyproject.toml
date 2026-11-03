@@ -1,0 +1,16 @@
+[project]
+name = "endless_test"
+version = "1.1.0"
+description = "带 AI 伙伴的 Roguelike 射击：8 职业自由构筑，60 节点科技树；Neko 自己选职业、定战术、放技能。"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "tangbai" }]
+license = { text = "MIT" }
+keywords = ["neko", "plugin", "game", "roguelike", "shooter"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
