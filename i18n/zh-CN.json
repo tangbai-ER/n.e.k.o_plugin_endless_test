@@ -1,6 +1,6 @@
 {
   "plugin.name": "无尽测试",
-  "plugin.description": "把《无尽测试》接入 Neko：统一保存养成/图鉴/战绩数据，可从插件面板或独立全屏程序开局，AI 伙伴由 Neko 自己选职业、决定战术与科技，还能听你指挥。",
+  "plugin.description": "带 AI 伙伴的 Roguelike 射击：8 职业自由构筑，60 节点科技树，边打边升级；Neko 自己选职业、定战术、放技能，还能听你指挥；12 页图鉴、4 个 Boss、联机测试版，存档在插件里换浏览器不丢。",
   "entry.launch_window.name": "全屏窗口开局",
   "entry.launch_window.description": "以独立全屏窗口（无地址栏、无标题栏）启动《无尽测试》，退出时会直接关闭程序。",
   "entry.launch_panel.name": "插件面板开局",
